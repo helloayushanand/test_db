@@ -12,11 +12,17 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* Dark mode support */
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
   }
+}
+
+/* Ensure dark mode works with class strategy */
+.dark {
+  color-scheme: dark;
 }
 
 body {

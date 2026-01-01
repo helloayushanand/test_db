@@ -1,16 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { FileBrowser } from "@/components/file-browser";
-import { Send } from "lucide-react";
+import { Send, Moon, Sun, Menu, X } from "lucide-react";
 import clsx from "clsx";
 
 // Dynamically import PdfReader with SSR disabled to avoid DOMMatrix errors
 const PdfReader = dynamic(() => import("@/components/pdf-reader").then(mod => ({ default: mod.PdfReader })), {
   ssr: false,
   loading: () => (
-    <div className="flex-1 flex items-center justify-center bg-stone-100 text-stone-400 font-serif italic">
+    <div className="flex-1 flex items-center justify-center bg-stone-100 dark:bg-slate-900 text-stone-400 dark:text-slate-500 font-serif italic transition-colors duration-300">
       Loading PDF reader...
     </div>
   )
@@ -22,6 +22,72 @@ export default function Home() {
   const [chatHistory, setChatHistory] = useState<{ role: 'user' | 'ai', content: string, sources?: string[] }[]>([]);
   const [isIngesting, setIsIngesting] = useState(false);
   const [previousBook, setPreviousBook] = useState<string | null>(null);
+  const [darkMode, setDarkMode] = useState(false);
+  const [isLibraryOpen, setIsLibraryOpen] = useState(true);
+  const [ingestedBooks, setIngestedBooks] = useState<Set<string>>(new Set());
+
+  // Load preferences from localStorage on mount
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme-preference');
+    const savedLibraryState = localStorage.getItem('library-open');
+    
+    if (savedTheme === 'dark') {
+      setDarkMode(true);
+      document.documentElement.classList.add('dark');
+    }
+    
+    // Default to open if no preference saved, otherwise use saved preference
+    if (savedLibraryState !== null) {
+      setIsLibraryOpen(savedLibraryState === 'true');
+    }
+  }, []);
+
+  // Toggle dark mode
+  function toggleDarkMode() {
+    const newDarkMode = !darkMode;
+    setDarkMode(newDarkMode);
+    
+    const htmlElement = document.documentElement;
+    if (newDarkMode) {
+      htmlElement.classList.add('dark');
+      localStorage.setItem('theme-preference', 'dark');
+    } else {
+      htmlElement.classList.remove('dark');
+      localStorage.setItem('theme-preference', 'light');
+    }
+  }
+
+  // Toggle library sidebar
+  function toggleLibrary() {
+    const newState = !isLibraryOpen;
+    setIsLibraryOpen(newState);
+    localStorage.setItem('library-open', newState.toString());
+  }
+
+  // Auto-ingest book when selected
+  async function autoIngestBook(bookPath: string) {
+    // Skip if already ingested
+    if (ingestedBooks.has(bookPath)) {
+      return;
+    }
+
+    try {
+      const encodedFilename = encodeURIComponent(bookPath);
+      const response = await fetch(`http://localhost:8000/ingest?filename=${encodedFilename}`, { 
+        method: 'POST' 
+      });
+      
+      if (response.ok) {
+        setIngestedBooks(prev => new Set(prev).add(bookPath));
+        console.log(`Auto-ingested: ${bookPath}`);
+      } else {
+        console.warn(`Failed to auto-ingest ${bookPath}, but continuing...`);
+      }
+    } catch (error) {
+      // Silently fail for auto-ingestion - user can manually ingest if needed
+      console.warn(`Auto-ingestion error for ${bookPath}:`, error);
+    }
+  }
 
   // Handle book selection change
   function handleBookSelect(book: string | null) {
@@ -32,6 +98,11 @@ export default function Home() {
     }
     setPreviousBook(book);
     setSelectedBook(book);
+    
+    // Auto-ingest when a book is selected
+    if (book && !ingestedBooks.has(book)) {
+      autoIngestBook(book);
+    }
   }
 
   async function handleSendMessage() {
@@ -97,6 +168,7 @@ export default function Home() {
       }
       
       const data = await response.json();
+      setIngestedBooks(prev => new Set(prev).add(selectedBook));
       alert(`Success! ${data.message || 'Book ingrained in memory!'}`);
     } catch (e: any) {
       const errorMsg = e.message || "Failed to ingest book. Check backend logs.";
@@ -108,62 +180,95 @@ export default function Home() {
   }
 
   return (
-    <div className="flex h-screen bg-stone-100 font-sans">
+    <div className="flex h-screen bg-stone-100 dark:bg-slate-900 font-sans transition-colors duration-300">
       {/* Sidebar */}
-      <FileBrowser onSelectBook={handleBookSelect} />
-
+      {isLibraryOpen && (
+        <div className="w-64 transition-all duration-300 ease-in-out">
+          <FileBrowser 
+            onSelectBook={handleBookSelect} 
+            onClose={toggleLibrary}
+          />
+        </div>
+      )}
+      
       {/* Main Content: Split View */}
       <div className="flex-1 flex flex-col h-full w-full">
         {/* Header */}
-        <header className="h-14 border-b bg-white flex items-center px-4 justify-between">
-          <h1 className="font-serif font-bold text-stone-700">The Agora</h1>
-          {selectedBook && (
-            <div className="flex gap-2 items-center">
-              <span className="text-sm text-stone-500 py-1">{selectedBook}</span>
+        <header className="h-14 border-b bg-white dark:bg-slate-800 border-stone-200 dark:border-slate-700 flex items-center px-4 justify-between transition-colors duration-300">
+          <div className="flex items-center gap-3">
+            {!isLibraryOpen && (
               <button
-                onClick={handleIngest}
-                disabled={isIngesting}
-                className="text-xs bg-stone-800 text-white px-2 py-1 rounded hover:bg-stone-600 disabled:opacity-50"
+                onClick={toggleLibrary}
+                className="p-2 rounded hover:bg-stone-100 dark:hover:bg-slate-700 transition-colors"
+                aria-label="Open library"
               >
-                {isIngesting ? "Memorizing..." : "Memorize Book"}
+                <Menu className="w-5 h-5 text-stone-600 dark:text-slate-300" />
               </button>
-              {chatHistory.length > 0 && (
-                <button
-                  onClick={() => setChatHistory([])}
-                  className="text-xs bg-stone-300 text-stone-700 px-2 py-1 rounded hover:bg-stone-400"
-                  title="Clear chat history"
-                >
-                  Clear Chat
-                </button>
+            )}
+            <h1 className="font-serif font-bold text-stone-700 dark:text-slate-200">The Agora</h1>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={toggleDarkMode}
+              className="p-2 rounded hover:bg-stone-100 dark:hover:bg-slate-700 transition-colors"
+              aria-label="Toggle dark mode"
+            >
+              {darkMode ? (
+                <Sun className="w-5 h-5 text-stone-600 dark:text-slate-300" />
+              ) : (
+                <Moon className="w-5 h-5 text-stone-600 dark:text-slate-300" />
               )}
-            </div>
-          )}
+            </button>
+            {selectedBook && (
+              <div className="flex gap-2 items-center">
+                <span className="text-sm text-stone-500 dark:text-slate-400 py-1">{selectedBook}</span>
+                <button
+                  onClick={handleIngest}
+                  disabled={isIngesting}
+                  className="text-xs bg-stone-800 dark:bg-slate-700 text-white dark:text-slate-100 px-2 py-1 rounded hover:bg-stone-600 dark:hover:bg-slate-600 disabled:opacity-50 transition-colors"
+                >
+                  {isIngesting ? "Memorizing..." : "Memorize Book"}
+                </button>
+                {chatHistory.length > 0 && (
+                  <button
+                    onClick={() => setChatHistory([])}
+                    className="text-xs bg-stone-300 dark:bg-slate-700 text-stone-700 dark:text-slate-200 px-2 py-1 rounded hover:bg-stone-400 dark:hover:bg-slate-600 transition-colors"
+                    title="Clear chat history"
+                  >
+                    Clear Chat
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </header>
 
         <div className="flex-1 flex overflow-hidden">
           {/* PDF Reader (Left) */}
-          <div className="flex-1 border-r border-stone-200 relative">
+          <div className="flex-1 border-r border-stone-200 dark:border-slate-700 relative transition-colors duration-300">
             <PdfReader file={selectedBook} />
           </div>
 
           {/* Chat (Right) */}
-          <div className="w-[400px] flex flex-col bg-white">
+          <div className="w-[400px] flex flex-col bg-white dark:bg-slate-800 transition-colors duration-300">
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {chatHistory.length === 0 && (
-                <p className="text-center text-stone-400 mt-10 italic">
+                <p className="text-center text-stone-400 dark:text-slate-500 mt-10 italic">
                   Ask me anything about the text...
                 </p>
               )}
               {chatHistory.map((msg, i) => (
                 <div key={i} className={clsx(
                   "p-3 rounded-lg text-sm max-w-[90%]",
-                  msg.role === 'user' ? "bg-stone-100 ml-auto text-stone-800" : "bg-blue-50 text-blue-900 border border-blue-100"
+                  msg.role === 'user' 
+                    ? "bg-stone-100 dark:bg-slate-700 ml-auto text-stone-800 dark:text-slate-100" 
+                    : "bg-blue-50 dark:bg-blue-900/30 text-blue-900 dark:text-blue-100 border border-blue-100 dark:border-blue-800/50"
                 )}>
                   <div>{msg.content}</div>
                   {msg.role === 'ai' && msg.sources && msg.sources.length > 0 && (
-                    <div className="mt-2 pt-2 border-t border-blue-200">
-                      <div className="text-xs text-blue-700 font-semibold mb-1">Sources:</div>
-                      <ul className="text-xs text-blue-600 space-y-1">
+                    <div className="mt-2 pt-2 border-t border-blue-200 dark:border-blue-800/50">
+                      <div className="text-xs text-blue-700 dark:text-blue-300 font-semibold mb-1">Sources:</div>
+                      <ul className="text-xs text-blue-600 dark:text-blue-400 space-y-1">
                         {msg.sources.map((source, idx) => (
                           <li key={idx} className="truncate">• {source}</li>
                         ))}
@@ -173,10 +278,10 @@ export default function Home() {
                 </div>
               ))}
             </div>
-            <div className="p-4 border-t border-stone-100">
+            <div className="p-4 border-t border-stone-100 dark:border-slate-700 transition-colors duration-300">
               <div className="relative">
                 <input
-                  className="w-full bg-stone-50 border border-stone-200 rounded-full pl-4 pr-10 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-stone-400"
+                  className="w-full bg-stone-50 dark:bg-slate-700 border border-stone-200 dark:border-slate-600 text-stone-900 dark:text-slate-100 rounded-full pl-4 pr-10 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-stone-400 dark:focus:ring-slate-500 transition-colors duration-300"
                   placeholder="Ask the tutor..."
                   value={query}
                   onChange={e => setQuery(e.target.value)}
@@ -184,7 +289,7 @@ export default function Home() {
                 />
                 <button
                   onClick={handleSendMessage}
-                  className="absolute right-2 top-1.5 text-stone-400 hover:text-stone-600"
+                  className="absolute right-2 top-1.5 text-stone-400 dark:text-slate-400 hover:text-stone-600 dark:hover:text-slate-200 transition-colors"
                 >
                   <Send className="w-4 h-4" />
                 </button>
