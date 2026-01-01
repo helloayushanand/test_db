@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+python-dotenv
+pypdf
+langchain              # The core package
+langchain-community    # For document loaders
+langchain-google-genai # For Gemini
+langchain-classic      # For chains (RetrievalQA)
+chromadb
+pydantic
