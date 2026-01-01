@@ -3,8 +3,10 @@ uvicorn
 python-dotenv
 pypdf
 langchain              # The core package
-langchain-community    # For document loaders
-langchain-google-genai # For Gemini
+langchain-community    # For document loaders and embeddings
+langchain-groq         # For Groq LLM (free tier)
 langchain-classic      # For chains (RetrievalQA)
 chromadb
 pydantic
+sentence-transformers  # For HuggingFace embeddings
+torch                  # Required for sentence-transformers

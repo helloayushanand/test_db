@@ -5,7 +5,7 @@ import { Book, ChevronRight, File } from "lucide-react";
 import clsx from "clsx";
 
 interface FileBrowserProps {
-    onSelectBook: (path: str) => void;
+    onSelectBook: (path: string) => void;
 }
 
 export function FileBrowser({ onSelectBook }: FileBrowserProps) {
